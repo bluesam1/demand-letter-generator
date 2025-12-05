@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Design tokens as CSS variables */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-text: #111827;
+  --color-text-light: #6b7280;
+  --color-bg: #ffffff;
+  --color-bg-alt: #f9fafb;
+  --color-border: #e5e7eb;
+
+  /* Typography */
+  --font-sans: Inter, system-ui, -apple-system, sans-serif;
+  --font-mono: Consolas, Monaco, monospace;
+
+  /* Spacing */
+  --spacing-unit: 0.25rem;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+
+  /* Border radius */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: var(--color-text);
+  background-color: var(--color-bg-alt);
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-alt);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-light);
+}

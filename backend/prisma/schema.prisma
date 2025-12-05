@@ -1,0 +1,281 @@
+// Prisma schema for Steno Demand Letter Generator
+// Based on docs/architecture/data-model.md
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Core Entities
+
+model Firm {
+  id               String   @id @default(uuid()) @map("firm_id")
+  firmName         String   @map("firm_name") @db.VarChar(255)
+  firmAddress      String?  @map("firm_address") @db.Text
+  contactEmail     String?  @map("contact_email") @db.VarChar(255)
+  contactPhone     String?  @map("contact_phone") @db.VarChar(50)
+  subscriptionTier String   @default("Basic") @map("subscription_tier") @db.VarChar(50)
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relations
+  users          User[]
+  invitations    Invitation[]
+  templates      Template[]
+  demandLetters  DemandLetter[]
+
+  @@index([firmName], map: "idx_firm_name")
+  @@index([isActive], map: "idx_firm_active")
+  @@map("firm")
+}
+
+model User {
+  id           String    @id @default(uuid()) @map("user_id")
+  firmId       String    @map("firm_id")
+  email        String    @unique @db.VarChar(255)
+  firstName    String    @map("first_name") @db.VarChar(100)
+  lastName     String    @map("last_name") @db.VarChar(100)
+  role         String    @db.VarChar(50)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  lastLogin    DateTime? @map("last_login") @db.Timestamptz()
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relations
+  firm                     Firm              @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  templatesCreated         Template[]
+  templateVersionsCreated  TemplateVersion[]
+  demandLettersCreated     DemandLetter[]    @relation("LetterCreator")
+  sourceDocumentsUploaded  SourceDocument[]
+  letterVersionsCreated    LetterVersion[]
+  collaborations           Collaboration[]
+  aiRefinementsRequested   AIRefinement[]
+  exportsCreated           Export[]
+
+  @@index([firmId], map: "idx_user_firm")
+  @@index([email], map: "idx_user_email")
+  @@index([isActive], map: "idx_user_active")
+  @@map("user")
+}
+
+model Invitation {
+  id          String    @id @default(uuid()) @map("invitation_id")
+  firmId      String    @map("firm_id")
+  email       String    @db.VarChar(255)
+  role        String    @db.VarChar(50)
+  token       String?   @unique @db.VarChar(255)
+  createdBy   String    @map("created_by")
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz()
+  acceptedAt  DateTime? @map("accepted_at") @db.Timestamptz()
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  // Relations
+  firm Firm @relation(fields: [firmId], references: [id], onDelete: Cascade)
+
+  @@index([firmId], map: "idx_invitation_firm")
+  @@index([email], map: "idx_invitation_email")
+  @@index([token], map: "idx_invitation_token")
+  @@index([expiresAt], map: "idx_invitation_expires")
+  @@map("invitation")
+}
+
+model Template {
+  id                  String   @id @default(uuid()) @map("template_id")
+  firmId              String   @map("firm_id")
+  templateName        String   @map("template_name") @db.VarChar(255)
+  templateDescription String?  @map("template_description") @db.Text
+  templateContent     Json     @map("template_content") @db.JsonB
+  category            String?  @db.VarChar(100)
+  createdById         String   @map("created_by")
+  version             Int      @default(1)
+  isDefault           Boolean  @default(false) @map("is_default")
+  isActive            Boolean  @default(true) @map("is_active")
+  usageCount          Int      @default(0) @map("usage_count")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relations
+  firm             Firm              @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  createdBy        User              @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  demandLetters    DemandLetter[]
+  templateVersions TemplateVersion[]
+
+  @@unique([firmId, templateName], map: "unique_template_name_per_firm")
+  @@index([firmId], map: "idx_template_firm")
+  @@index([category], map: "idx_template_category")
+  @@index([isDefault], map: "idx_template_default")
+  @@map("template")
+}
+
+model TemplateVersion {
+  id          String   @id @default(uuid()) @map("version_id")
+  templateId  String   @map("template_id")
+  version     Int
+  content     Json     @db.JsonB
+  createdById String   @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  // Relations
+  template  Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  createdBy User     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([templateId, version], map: "unique_template_version")
+  @@index([templateId], map: "idx_template_version_template")
+  @@index([createdAt(sort: Desc)], map: "idx_template_version_created_at")
+  @@map("template_version")
+}
+
+model DemandLetter {
+  id            String    @id @default(uuid()) @map("letter_id")
+  firmId        String    @map("firm_id")
+  templateId    String?   @map("template_id")
+  createdById   String    @map("created_by")
+  caseReference String?   @map("case_reference") @db.VarChar(100)
+  clientName    String    @map("client_name") @db.VarChar(255)
+  defendantName String    @map("defendant_name") @db.VarChar(255)
+  incidentDate  DateTime? @map("incident_date") @db.Date
+  demandAmount  Decimal?  @map("demand_amount") @db.Decimal(15, 2)
+  status        String    @default("Draft") @db.VarChar(50)
+  content       String?   @db.Text
+  metadata      Json      @default("{}") @db.JsonB
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  finalizedAt   DateTime? @map("finalized_at") @db.Timestamptz()
+
+  // Relations
+  firm             Firm              @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  template         Template?         @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  createdBy        User              @relation("LetterCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  sourceDocuments  SourceDocument[]
+  letterVersions   LetterVersion[]
+  collaborations   Collaboration[]
+  aiRefinements    AIRefinement[]
+  exports          Export[]
+
+  @@index([firmId], map: "idx_letter_firm")
+  @@index([createdById], map: "idx_letter_created_by")
+  @@index([status], map: "idx_letter_status")
+  @@index([templateId], map: "idx_letter_template")
+  @@index([clientName], map: "idx_letter_client")
+  @@index([defendantName], map: "idx_letter_defendant")
+  @@index([firmId, status], map: "idx_letter_firm_status")
+  @@index([firmId, createdAt(sort: Desc)], map: "idx_letter_firm_created_at")
+  @@map("demand_letter")
+}
+
+model SourceDocument {
+  id               String    @id @default(uuid()) @map("document_id")
+  letterId         String    @map("letter_id")
+  uploadedById     String    @map("uploaded_by")
+  fileName         String    @map("file_name") @db.VarChar(255)
+  fileType         String    @map("file_type") @db.VarChar(50)
+  fileSize         BigInt    @map("file_size")
+  storagePath      String    @map("storage_path") @db.VarChar(500)
+  extractedText    String?   @map("extracted_text") @db.Text
+  documentType     String?   @map("document_type") @db.VarChar(100)
+  processingStatus String    @default("Pending") @map("processing_status") @db.VarChar(50)
+  uploadedAt       DateTime  @default(now()) @map("uploaded_at") @db.Timestamptz()
+  processedAt      DateTime? @map("processed_at") @db.Timestamptz()
+
+  // Relations
+  letter     DemandLetter @relation(fields: [letterId], references: [id], onDelete: Cascade)
+  uploadedBy User         @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([letterId], map: "idx_source_document_letter")
+  @@index([uploadedById], map: "idx_source_document_uploaded_by")
+  @@index([processingStatus], map: "idx_source_document_status")
+  @@index([documentType], map: "idx_source_document_type")
+  @@map("source_document")
+}
+
+model LetterVersion {
+  id            String   @id @default(uuid()) @map("version_id")
+  letterId      String   @map("letter_id")
+  versionNumber Int      @map("version_number")
+  content       String   @db.Text
+  createdById   String   @map("created_by")
+  changeSummary String?  @map("change_summary") @db.Text
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  // Relations
+  letter    DemandLetter @relation(fields: [letterId], references: [id], onDelete: Cascade)
+  createdBy User         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([letterId, versionNumber], map: "unique_letter_version")
+  @@index([letterId], map: "idx_letter_version_letter")
+  @@index([createdAt(sort: Desc)], map: "idx_letter_version_created_at")
+  @@map("letter_version")
+}
+
+model Collaboration {
+  id         String   @id @default(uuid()) @map("collaboration_id")
+  letterId   String   @map("letter_id")
+  userId     String   @map("user_id")
+  changeType String   @map("change_type") @db.VarChar(50)
+  changeData Json     @map("change_data") @db.JsonB
+  position   Json?    @db.JsonB
+  isResolved Boolean  @default(false) @map("is_resolved")
+  timestamp  DateTime @default(now()) @db.Timestamptz()
+
+  // Relations
+  letter DemandLetter @relation(fields: [letterId], references: [id], onDelete: Cascade)
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([letterId], map: "idx_collaboration_letter")
+  @@index([userId], map: "idx_collaboration_user")
+  @@index([timestamp(sort: Desc)], map: "idx_collaboration_timestamp")
+  @@index([changeType], map: "idx_collaboration_type")
+  @@map("collaboration")
+}
+
+model AIRefinement {
+  id               String    @id @default(uuid()) @map("refinement_id")
+  letterId         String    @map("letter_id")
+  requestedById    String    @map("requested_by")
+  instruction      String    @db.Text
+  aiModel          String    @map("ai_model") @db.VarChar(100)
+  inputContent     String    @map("input_content") @db.Text
+  outputContent    String?   @map("output_content") @db.Text
+  status           String    @default("Pending") @db.VarChar(50)
+  processingTimeMs Int?      @map("processing_time_ms")
+  tokenCount       Int?      @map("token_count")
+  errorMessage     String?   @map("error_message") @db.Text
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  completedAt      DateTime? @map("completed_at") @db.Timestamptz()
+
+  // Relations
+  letter      DemandLetter @relation(fields: [letterId], references: [id], onDelete: Cascade)
+  requestedBy User         @relation(fields: [requestedById], references: [id], onDelete: SetNull)
+
+  @@index([letterId], map: "idx_ai_refinement_letter")
+  @@index([requestedById], map: "idx_ai_refinement_requested_by")
+  @@index([status], map: "idx_ai_refinement_status")
+  @@index([createdAt(sort: Desc)], map: "idx_ai_refinement_created_at")
+  @@map("ai_refinement")
+}
+
+model Export {
+  id           String   @id @default(uuid()) @map("export_id")
+  letterId     String   @map("letter_id")
+  exportedById String   @map("exported_by")
+  exportFormat String   @map("export_format") @db.VarChar(10)
+  fileName     String   @map("file_name") @db.VarChar(255)
+  storagePath  String   @map("storage_path") @db.VarChar(500)
+  fileSize     BigInt?  @map("file_size")
+  exportedAt   DateTime @default(now()) @map("exported_at") @db.Timestamptz()
+
+  // Relations
+  letter     DemandLetter @relation(fields: [letterId], references: [id], onDelete: Cascade)
+  exportedBy User         @relation(fields: [exportedById], references: [id], onDelete: SetNull)
+
+  @@index([letterId], map: "idx_export_letter")
+  @@index([exportedById], map: "idx_export_user")
+  @@index([exportedAt(sort: Desc)], map: "idx_export_date")
+  @@map("export")
+}
